@@ -1,0 +1,165 @@
+# =============================================
+# 摩擦仿真模型参数配置
+# 古代天文简仪轴承摩擦学参数库
+# =============================================
+# 使用方式：@ConfigurationProperties(prefix = "friction-params")
+# =============================================
+
+friction-params:
+  # 通用物理常数
+  constants:
+    pi: 3.141592653589793
+    gravity: 9.81
+    roughness-combined-factor: 1.41421356  # sqrt(2)
+
+  # 材料对实验磨损系数数据库
+  material-pairs:
+    BRONZE_CASTIRON:
+      material1: "锡青铜"
+      material2: "灰铸铁"
+      material1-hardness-mpa: 180
+      material2-hardness-mpa: 220
+      reference-wear-coefficient: 4.5e-5
+      hardness-exponent: 0.85
+      lubrication-regimes:
+        boundary:
+          min-wear-coeff: 5.0e-4
+          max-wear-coeff: 2.0e-3
+          lambda-threshold: 0.0
+        mixed-1:
+          min-wear-coeff: 1.0e-5
+          max-wear-coeff: 5.0e-5
+          lambda-threshold: 1.0
+        mixed-2:
+          min-wear-coeff: 5.0e-6
+          max-wear-coeff: 1.0e-5
+          lambda-threshold: 2.0
+        hydrodynamic:
+          min-wear-coeff: 1.0e-7
+          max-wear-coeff: 5.0e-7
+          lambda-threshold: 3.5
+
+    BRONZE_STEEL:
+      material1: "锡青铜"
+      material2: "碳素钢"
+      material1-hardness-mpa: 180
+      material2-hardness-mpa: 785
+      reference-wear-coefficient: 3.2e-5
+      hardness-exponent: 0.80
+      lubrication-regimes:
+        boundary:
+          min-wear-coeff: 3.0e-4
+          max-wear-coeff: 1.5e-3
+          lambda-threshold: 0.0
+        mixed-1:
+          min-wear-coeff: 8.0e-6
+          max-wear-coeff: 4.0e-5
+          lambda-threshold: 1.0
+        mixed-2:
+          min-wear-coeff: 4.0e-6
+          max-wear-coeff: 8.0e-6
+          lambda-threshold: 2.0
+        hydrodynamic:
+          min-wear-coeff: 8.0e-8
+          max-wear-coeff: 3.0e-7
+          lambda-threshold: 3.5
+
+    CASTIRON_CASTIRON:
+      material1: "灰铸铁"
+      material2: "灰铸铁"
+      material1-hardness-mpa: 220
+      material2-hardness-mpa: 220
+      reference-wear-coefficient: 6.5e-5
+      hardness-exponent: 0.90
+      lubrication-regimes:
+        boundary:
+          min-wear-coeff: 8.0e-4
+          max-wear-coeff: 3.0e-3
+          lambda-threshold: 0.0
+        mixed-1:
+          min-wear-coeff: 2.0e-5
+          max-wear-coeff: 8.0e-5
+          lambda-threshold: 1.0
+        mixed-2:
+          min-wear-coeff: 8.0e-6
+          max-wear-coeff: 2.0e-5
+          lambda-threshold: 2.0
+        hydrodynamic:
+          min-wear-coeff: 2.0e-7
+          max-wear-coeff: 8.0e-7
+          lambda-threshold: 3.5
+
+    BRASS_STEEL:
+      material1: "黄铜"
+      material2: "碳素钢"
+      material1-hardness-mpa: 120
+      material2-hardness-mpa: 785
+      reference-wear-coefficient: 3.8e-5
+      hardness-exponent: 0.82
+      lubrication-regimes:
+        boundary:
+          min-wear-coeff: 4.0e-4
+          max-wear-coeff: 1.8e-3
+          lambda-threshold: 0.0
+        mixed-1:
+          min-wear-coeff: 1.2e-5
+          max-wear-coeff: 5.5e-5
+          lambda-threshold: 1.0
+        mixed-2:
+          min-wear-coeff: 5.5e-6
+          max-wear-coeff: 1.2e-5
+          lambda-threshold: 2.0
+        hydrodynamic:
+          min-wear-coeff: 1.0e-7
+          max-wear-coeff: 4.0e-7
+          lambda-threshold: 3.5
+
+  # 润滑模型参数
+  lubrication-model:
+    # Hamrock-Dowson公式系数
+    hamrock-dowson:
+      coefficient: 3.63
+      velocity-exponent: 0.68
+      load-exponent: -0.073
+      material-factor-coefficient: 0.68
+
+    # 微凸体接触模型 (误差函数过渡)
+    asperity-contact:
+      fully-fluid-lambda: 5.0
+      fully-boundary-lambda: 0.5
+      transition-center: 3.0
+      transition-width: 1.414  # sqrt(2)
+
+    # 摩擦系数计算参数
+    friction-coefficient:
+      boundary-min: 0.15
+      boundary-max: 0.45
+      boundary-lambda-decay: 1.5
+      hydrodynamic-base: 0.001
+      hydrodynamic-sommerfeld-factor: 0.1
+      hydrodynamic-max: 0.05
+
+    # 粘度-温度修正 (指数模型)
+    viscosity-temperature:
+      reference-temperature: 40.0
+      decay-coefficient: 0.03
+      minimum-velocity: 0.001
+
+    # PV值修正
+    pv-factor:
+      base: 1.0
+      friction-coefficient-weight: 0.5
+      max: 3.0
+
+  # 磨损计算参数
+  wear-calculation:
+    archard-time-step-seconds: 60
+    minimum-film-thickness-um: 0.01
+
+  # 告警阈值 (可被数据库配置覆盖)
+  alert-thresholds:
+    max-wear-default-mm: 0.1
+    max-pointing-error-arcmin: 1.0
+    friction-torque-baseline-nm: 5.0
+    friction-torque-warning-factor: 2.0
+    wear-approach-factor: 0.8

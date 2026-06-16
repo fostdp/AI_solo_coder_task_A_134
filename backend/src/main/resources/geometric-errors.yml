@@ -1,0 +1,94 @@
+# =============================================
+# 几何误差参数配置
+# 简仪轴系安装几何误差与误差传递模型参数
+# =============================================
+# 使用方式：@ConfigurationProperties(prefix = "geometric-errors")
+# =============================================
+
+geometric-errors:
+  # 轴系默认安装误差 (单位：度)
+  # 若数据库 bearing_config 表有值则以数据库为准
+  default-axis-errors:
+    # 赤道轴-赤纬轴垂直度误差
+    perpendicularity-equatorial: 0.01
+    # 地平经轴-地平纬轴垂直度误差
+    perpendicularity-altaz: 0.01
+    # 轴向跳动误差 (端面跳动)
+    axial-runout: 0.005
+    # 径向跳动误差
+    radial-runout: 0.003
+
+  # 各轴误差基线 (磨损诱导误差，单位：角分)
+  axis-error-baselines:
+    EQUATORIAL:
+      wear-base-error-arcmin: 8.0
+      description: "赤道轴/四游仪赤经环轴"
+    DECLINATION:
+      wear-base-error-arcmin: 6.0
+      description: "赤纬轴"
+    AZIMUTH:
+      wear-base-error-arcmin: 5.0
+      description: "地平经轴/立轴"
+    ALTITUDE:
+      wear-base-error-arcmin: 4.0
+      description: "地平纬轴/卧轴"
+    DEFAULT:
+      wear-base-error-arcmin: 5.0
+      description: "默认轴类型"
+
+  # 误差合成模型参数
+  error-propagation:
+    # 误差传递因子
+    wear-error:
+      wear-min-contribution: 0.1
+      wear-max-contribution: 1.0
+    friction-error:
+      torsional-stiffness-factor: 0.09817  # π/32 ≈ 0.09817
+
+    # 几何误差投影系数
+    geometric-projection:
+      # 地平轴系垂直度对方位角误差的贡献系数
+      perpendicularity-altaz-azimuth-factor: 0.5
+      # 轴向跳动在sin(Dec)最大处(极点)影响最大
+      axial-runout-sin-dec-weight: 1.0
+      # 径向跳动在cos(Dec)最大处(赤道)影响最大
+      radial-runout-cos-dec-weight: 1.0
+
+    # DCM矩阵变换参数
+    dcm-transformation:
+      # 垂直度误差到欧拉角roll的缩放因子
+      perpendicularity-to-roll-scale: 0.5
+      euler-sequence: "ZXY"
+
+    # 观测站点 (用于计算默认赤纬)
+    observing-site:
+      name: "北京古观象台"
+      latitude-deg: 39.9042
+      longitude-deg: 116.4074
+      altitude-m: 43.5
+      default-declination-deg: 39.9
+
+  # 不确定度评定参数
+  uncertainty-assessment:
+    # 系统不确定度分量 (占对应误差的比例)
+    systematic-factor: 0.10
+    # 随机不确定度分量
+    random-factor: 0.05
+    # 几何误差额外不确定度
+    geometric-factor: 0.15
+
+  # 观测天区误差放大系数
+  sky-region-amplification:
+    # 高赤纬区阈值 (Dec > 60°视为高赤纬)
+    high-declination-threshold-deg: 60.0
+    # 高赤纬区赤经误差放大系数 (sec(Dec))
+    max-ra-amplification: 10.0  # sec(84.3°)≈10，防止除零
+
+  # 误差源权重配置 (用于饼图展示)
+  error-source-weights:
+    wear-induced: 0.40
+    friction-induced: 0.15
+    geometric-perpendicularity: 0.25
+    geometric-runout: 0.10
+    thermal-deformation: 0.05
+    sensor-noise: 0.05

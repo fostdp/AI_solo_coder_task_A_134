@@ -3,8 +3,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import SockJS from 'sockjs-client';
 import Stomp from 'stompjs';
 import { Chart, registerables } from 'chart.js';
-import { initArmillaryModel } from './armillary-model.js';
-import { initBearingViews } from './bearing-views.js';
+import { initSimplifiedArmillary3D } from './simplified_armilla_3d.js';
+import { initBearingPanel } from './bearing_panel.js';
 import { initCharts } from './charts.js';
 
 Chart.register(...registerables);
@@ -325,7 +325,11 @@ function initTabs() {
             document.getElementById(`tab-${tabName}`).classList.add('active');
 
             if (tabName === 'bearing') {
-                setTimeout(() => initBearingViews(state), 100);
+                setTimeout(() => {
+                    if (!state.bearingPanel) {
+                        state.bearingPanel = initBearingPanel('#tab-bearing');
+                    }
+                }, 100);
             } else if (tabName === 'charts') {
                 setTimeout(() => initCharts(state, CONFIG), 100);
             }
@@ -420,7 +424,7 @@ function initThreeJS() {
     state.scene = scene;
     state.controls = controls;
 
-    state.armillaryModel = initArmillaryModel(scene, state);
+    state.armillaryModel = initSimplifiedArmillary3D(scene);
 
     const starsGeometry = new THREE.BufferGeometry();
     const starPositions = [];

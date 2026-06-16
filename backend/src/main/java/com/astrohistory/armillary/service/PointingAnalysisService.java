@@ -1,9 +1,11 @@
 package com.astrohistory.armillary.service;
 
+import com.astrohistory.armillary.config.GeometricErrorProperties;
 import com.astrohistory.armillary.entity.ArmillaryInstrument;
 import com.astrohistory.armillary.entity.BearingConfig;
 import com.astrohistory.armillary.entity.PointingAnalysis;
 import com.astrohistory.armillary.entity.SensorData;
+import com.astrohistory.armillary.event.PointingAnalysisRequestedEvent;
 import com.astrohistory.armillary.repository.ArmillaryInstrumentRepository;
 import com.astrohistory.armillary.repository.BearingConfigRepository;
 import com.astrohistory.armillary.repository.PointingAnalysisRepository;
@@ -11,6 +13,7 @@ import com.astrohistory.armillary.repository.SensorDataRepository;
 import com.astrohistory.armillary.simulation.PointingAccuracyModel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -33,8 +36,8 @@ public class PointingAnalysisService {
     private final BearingConfigRepository bearingConfigRepository;
     private final SensorDataRepository sensorDataRepository;
     private final PointingAccuracyModel pointingModel;
-    private final WebSocketService webSocketService;
-    private final AlertService alertService;
+    private final GeometricErrorProperties geometricProperties;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public PointingAnalysis analyzePointing(
@@ -43,39 +46,35 @@ public class PointingAnalysisService {
             double targetDec,
             LocalDateTime analysisTime) {
 
+        log.info("[PointingAnalysisService] 收到指向分析请求: instrument={}, RA={:.4f}, Dec={:.4f}",
+                instrumentId, targetRa, targetDec);
+
+        LocalDateTime effectiveTime = analysisTime != null ? analysisTime : LocalDateTime.now();
+
+        eventPublisher.publishEvent(new PointingAnalysisRequestedEvent(
+                this, instrumentId, targetRa, targetDec, effectiveTime, "REST_API"
+        ));
+
         ArmillaryInstrument instrument = instrumentRepository.findById(instrumentId)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Instrument not found: " + instrumentId));
+                        "设备不存在: " + instrumentId));
 
         List<BearingConfig> bearingConfigs = bearingConfigRepository.findByInstrumentId(instrumentId);
-
         List<SensorData> latestSensorData = sensorDataRepository.findLatestForAllAxes(instrumentId);
 
         if (latestSensorData.isEmpty()) {
-            throw new IllegalStateException("No sensor data available for analysis");
+            throw new IllegalStateException("无可用于分析的传感器数据");
         }
 
         PointingAccuracyModel.PointingAnalysisResult result =
-                pointingModel.analyze(
-                        targetRa, targetDec,
-                        latestSensorData, bearingConfigs,
-                        analysisTime != null ? analysisTime : LocalDateTime.now());
+                pointingModel.analyze(targetRa, targetDec,
+                        latestSensorData, bearingConfigs, effectiveTime);
 
-        PointingAnalysis analysis = result.toEntity(instrument,
-                analysisTime != null ? analysisTime : LocalDateTime.now());
+        PointingAnalysis analysis = result.toEntity(instrument, effectiveTime);
         analysis = analysisRepository.save(analysis);
 
-        try {
-            alertService.checkPointingAccuracyAlert(instrument, analysis);
-        } catch (Exception e) {
-            log.error("Failed to check pointing accuracy alert", e);
-        }
-
-        try {
-            webSocketService.broadcastPointingAnalysis(analysis);
-        } catch (Exception e) {
-            log.error("Failed to broadcast analysis via WebSocket", e);
-        }
+        log.info("[PointingAnalysisService] 同步分析完成: 总误差={:.4f}'",
+                analysis.getTotalPointingError().doubleValue() * 60);
 
         return analysis;
     }
@@ -101,7 +100,8 @@ public class PointingAnalysisService {
 
     public PointingAnalysis analyzeCurrentPointing(UUID instrumentId) {
         double currentRa = calculateCurrentRightAscension();
-        double currentDec = calculateCurrentDeclination();
+        double currentDec = geometricProperties
+                .getErrorPropagation().getObservingSite().getDefaultDeclinationDeg();
         return analyzePointing(instrumentId, currentRa, currentDec, LocalDateTime.now());
     }
 
@@ -113,32 +113,19 @@ public class PointingAnalysisService {
         return normalizeAngle(gmst) * 15.0;
     }
 
-    private double calculateCurrentDeclination() {
-        return 39.9;
-    }
-
-    private double toJulianDate(LocalDateTime dateTime) {
-        int year = dateTime.getYear();
-        int month = dateTime.getMonthValue();
-        int day = dateTime.getDayOfMonth();
-        int hour = dateTime.getHour();
-        int minute = dateTime.getMinute();
-        int second = dateTime.getSecond();
-
-        if (month <= 2) {
-            year--;
-            month += 12;
-        }
-
+    private double toJulianDate(LocalDateTime dt) {
+        int year = dt.getYear();
+        int month = dt.getMonthValue();
+        int day = dt.getDayOfMonth();
+        int hour = dt.getHour();
+        int minute = dt.getMinute();
+        int second = dt.getSecond();
+        if (month <= 2) { year--; month += 12; }
         int a = year / 100;
         int b = 2 - a + a / 4;
-
         double julianDay = Math.floor(365.25 * (year + 4716)) +
-                Math.floor(30.6001 * (month + 1)) +
-                day + b - 1524.5;
-
+                Math.floor(30.6001 * (month + 1)) + day + b - 1524.5;
         double fracDay = (hour + minute / 60.0 + second / 3600.0) / 24.0;
-
         return julianDay + fracDay;
     }
 
