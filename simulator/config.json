@@ -1,0 +1,64 @@
+{
+    "mqtt": {
+        "broker": "localhost",
+        "port": 1883,
+        "clientId": "armillary-simulator-001",
+        "username": "",
+        "password": "",
+        "topicPrefix": "armillary/sensor"
+    },
+    "instrument": {
+        "id": "JY-001",
+        "name": "元代简仪复原件1号",
+        "reportInterval": 60000,
+        "axes": [
+            {
+                "name": "赤道轴",
+                "baseRotationSpeed": 0.25,
+                "baseFrictionTorque": 0.8,
+                "wearRateFactor": 1.0e-8,
+                "initialWearDepth": 0.002,
+                "radialLoad": 1200,
+                "axialLoad": 300
+            },
+            {
+                "name": "赤纬轴",
+                "baseRotationSpeed": 0.15,
+                "baseFrictionTorque": 0.6,
+                "wearRateFactor": 8.0e-9,
+                "initialWearDepth": 0.0015,
+                "radialLoad": 900,
+                "axialLoad": 200
+            },
+            {
+                "name": "地平经轴",
+                "baseRotationSpeed": 0.1,
+                "baseFrictionTorque": 0.5,
+                "wearRateFactor": 6.0e-9,
+                "initialWearDepth": 0.001,
+                "radialLoad": 700,
+                "axialLoad": 150
+            },
+            {
+                "name": "地平纬轴",
+                "baseRotationSpeed": 0.08,
+                "baseFrictionTorque": 0.4,
+                "wearRateFactor": 5.0e-9,
+                "initialWearDepth": 0.0008,
+                "radialLoad": 600,
+                "axialLoad": 120
+            }
+        ]
+    },
+    "simulation": {
+        "noiseLevel": 0.05,
+        "wearAccelerationFactor": 1.0,
+        "faultInjection": {
+            "enabled": false,
+            "faultType": "excessive_wear",
+            "faultAxis": "赤道轴",
+            "faultStartTime": "2025-01-01T00:00:00",
+            "faultSeverity": 2.0
+        }
+    }
+}
