@@ -1,0 +1,21 @@
+{
+  "name": "armillary-frontend",
+  "version": "1.0.0",
+  "description": "古代天文简仪轴承摩擦仿真与指向精度分析系统 - 前端",
+  "main": "index.html",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.160.0",
+    "@tweenjs/tween.js": "^21.0.0",
+    "sockjs-client": "^1.6.1",
+    "stompjs": "^2.3.3",
+    "chart.js": "^4.4.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}
