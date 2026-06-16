@@ -1,0 +1,75 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: armillary-simulation
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/armillary_simulation
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        jdbc:
+          time_zone: UTC
+        generate_statistics: false
+    open-in-view: false
+
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: UTC
+    serialization:
+      write-dates-as-timestamps: false
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+mqtt:
+  broker: tcp://localhost:1883
+  client-id: armillary-backend
+  username: admin
+  password: password
+  topic:
+    sensor: armillary/+/sensor/data
+    command: armillary/+/command
+
+websocket:
+  endpoint: /ws/armillary
+  topic-prefix: /topic
+  app-prefix: /app
+
+simulation:
+  alert:
+    max-wear-threshold: 0.1
+    max-pointing-error-arcmin: 1.0
+  friction:
+    time-step-seconds: 60
+    wear-update-interval: 1
+
+logging:
+  level:
+    root: INFO
+    com.astrohistory.armillary: DEBUG
+    org.springframework.integration.mqtt: DEBUG
+  file:
+    name: logs/armillary-simulation.log
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
