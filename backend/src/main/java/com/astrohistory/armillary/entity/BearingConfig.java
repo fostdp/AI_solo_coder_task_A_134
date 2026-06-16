@@ -41,6 +41,27 @@ public class BearingConfig {
     @Column(name = "material", length = 100)
     private String material;
 
+    @Column(name = "inner_ring_material", length = 100)
+    private String innerRingMaterial;
+
+    @Column(name = "outer_ring_material", length = 100)
+    private String outerRingMaterial;
+
+    @Column(name = "rolling_element_material", length = 100)
+    private String rollingElementMaterial;
+
+    @Column(name = "surface_roughness_ra", precision = 8, scale = 4)
+    private BigDecimal surfaceRoughnessRa;
+
+    @Column(name = "perpendicularity_error", precision = 10, scale = 8)
+    private BigDecimal perpendicularityError;
+
+    @Column(name = "axial_runout", precision = 10, scale = 8)
+    private BigDecimal axialRunout;
+
+    @Column(name = "radial_runout", precision = 10, scale = 8)
+    private BigDecimal radialRunout;
+
     @Column(name = "inner_diameter", precision = 10, scale = 4)
     private BigDecimal innerDiameter;
 

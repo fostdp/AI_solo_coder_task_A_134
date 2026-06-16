@@ -52,6 +52,21 @@ public class PointingAnalysis {
     @Column(name = "ra_error_source", columnDefinition = "jsonb")
     private Map<String, Object> raErrorSource;
 
+    @Column(name = "perpendicularity_error_equatorial", precision = 12, scale = 8)
+    private BigDecimal perpendicularityErrorEquatorial;
+
+    @Column(name = "perpendicularity_error_altaz", precision = 12, scale = 8)
+    private BigDecimal perpendicularityErrorAltaz;
+
+    @Column(name = "axial_runout_error", precision = 12, scale = 8)
+    private BigDecimal axialRunoutError;
+
+    @Column(name = "radial_runout_error", precision = 12, scale = 8)
+    private BigDecimal radialRunoutError;
+
+    @Column(name = "geometric_error_contribution", precision = 12, scale = 8)
+    private BigDecimal geometricErrorContribution;
+
     @Column(name = "error_uncertainty", precision = 12, scale = 8)
     BigDecimal errorUncertainty;
 

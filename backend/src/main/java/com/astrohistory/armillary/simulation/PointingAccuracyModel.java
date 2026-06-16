@@ -58,6 +58,14 @@ public class PointingAccuracyModel {
             }
         }
 
+        Map<String, BearingConfig> bearingConfigMap = new HashMap<>();
+        for (BearingConfig config : bearingConfigs) {
+            bearingConfigMap.put(config.getAxisName(), config);
+        }
+
+        GeometricErrorResult geometricError = calculateGeometricErrors(
+                bearingConfigMap, targetRa, targetDec);
+
         double decErrorRad = targetDec * DEG_TO_RAD;
         double cosDec = Math.cos(decErrorRad);
         double sinDec = Math.sin(decErrorRad);
@@ -70,27 +78,39 @@ public class PointingAccuracyModel {
         double raErrorContribution = equatorialError / Math.max(cosDec, 0.01);
         double decErrorContribution = declinationError;
 
-        double azimuthTotal = azimuthError + equatorialError * sinDec / Math.max(cosDec, 0.01);
-        double altitudeTotal = altitudeError + declinationError;
+        double azimuthTotal = azimuthError + equatorialError * sinDec / Math.max(cosDec, 0.01)
+                + geometricError.azimuthError;
+        double altitudeTotal = altitudeError + declinationError
+                + geometricError.altitudeError;
 
         double totalPointingError = Math.sqrt(
                 azimuthTotal * azimuthTotal + altitudeTotal * altitudeTotal
         );
 
-        double uncertainty = calculateUncertainty(axisErrors, sensorDataList);
+        double uncertainty = calculateUncertainty(axisErrors, sensorDataList, geometricError);
 
         Map<String, Object> errorSource = new HashMap<>();
         errorSource.put("axisErrors", axisErrors);
         errorSource.put("wearContributions", wearContributions);
         errorSource.put("frictionContributions", frictionContributions);
+        errorSource.put("geometricErrors", Map.of(
+                "perpendicularityEquatorial", geometricError.perpendicularityEquatorial,
+                "perpendicularityAltaz", geometricError.perpendicularityAltaz,
+                "axialRunout", geometricError.axialRunout,
+                "radialRunout", geometricError.radialRunout,
+                "azimuthContribution", geometricError.azimuthError,
+                "altitudeContribution", geometricError.altitudeError
+        ));
         errorSource.put("raErrorComponents", Map.of(
                 "equatorialAxis", equatorialError,
                 "azimuthAxis", azimuthError,
+                "geometric", geometricError.azimuthError,
                 "totalRaError", raErrorContribution
         ));
         errorSource.put("decErrorComponents", Map.of(
                 "declinationAxis", declinationError,
                 "altitudeAxis", altitudeError,
+                "geometric", geometricError.altitudeError,
                 "totalDecError", decErrorContribution
         ));
 
@@ -98,7 +118,7 @@ public class PointingAccuracyModel {
                 targetRa, targetDec,
                 azimuthTotal, altitudeTotal,
                 totalPointingError,
-                errorSource, uncertainty
+                errorSource, uncertainty, geometricError
         );
     }
 
@@ -136,7 +156,133 @@ public class PointingAccuracyModel {
         return Math.abs(angularDeflection) * RAD_TO_DEG * 60 * ARCSEC_TO_DEG;
     }
 
-    private double calculateUncertainty(Map<String, Double> axisErrors, List<SensorData> sensorDataList) {
+    private GeometricErrorResult calculateGeometricErrors(
+            Map<String, BearingConfig> bearingConfigMap,
+            double targetRa, double targetDec) {
+
+        BearingConfig equatorialBearing = bearingConfigMap.get("赤道轴");
+        BearingConfig declinationBearing = bearingConfigMap.get("赤纬轴");
+        BearingConfig azimuthBearing = bearingConfigMap.get("地平经轴");
+        BearingConfig altitudeBearing = bearingConfigMap.get("地平纬轴");
+
+        double perpErrorEquatorial = getGeometricError(
+                equatorialBearing, declinationBearing, "perpendicularity");
+        double perpErrorAltaz = getGeometricError(
+                azimuthBearing, altitudeBearing, "perpendicularity");
+
+        double axialRunout = getGeometricError(
+                equatorialBearing, declinationBearing, "axialRunout");
+        double radialRunout = getGeometricError(
+                equatorialBearing, declinationBearing, "radialRunout");
+
+        double[][] dcmEquatorial = buildDCMFromEuler(
+                perpErrorEquatorial * DEG_TO_RAD / 2,
+                0, 0);
+
+        double raRad = targetRa * DEG_TO_RAD;
+        double decRad = targetDec * DEG_TO_RAD;
+
+        double[] starVector = {
+                Math.cos(decRad) * Math.cos(raRad),
+                Math.cos(decRad) * Math.sin(raRad),
+                Math.sin(decRad)
+        };
+
+        double[] rotatedVector = multiplyMatrixVector(dcmEquatorial, starVector);
+
+        double newDec = Math.asin(Math.max(-1, Math.min(1, rotatedVector[2]))) * RAD_TO_DEG;
+        double newRa = Math.atan2(rotatedVector[1], rotatedVector[0]) * RAD_TO_DEG;
+        if (newRa < 0) newRa += 360;
+
+        double dRa = newRa - targetRa;
+        double dDec = newDec - targetDec;
+
+        double cosDec = Math.cos(decRad);
+        double sinDec = Math.sin(decRad);
+
+        double azimuthGeometric = dRa * cosDec + perpErrorAltaz * 0.5;
+        double altitudeGeometric = dDec + axialRunout * Math.abs(sinDec)
+                + radialRunout * Math.abs(cosDec);
+
+        double geometricContribution = Math.sqrt(
+                azimuthGeometric * azimuthGeometric +
+                        altitudeGeometric * altitudeGeometric
+        );
+
+        return new GeometricErrorResult(
+                perpErrorEquatorial, perpErrorAltaz,
+                axialRunout, radialRunout,
+                azimuthGeometric, altitudeGeometric,
+                geometricContribution
+        );
+    }
+
+    private double getGeometricError(BearingConfig bearing1, BearingConfig bearing2, String type) {
+        double error1 = 0.0;
+        double error2 = 0.0;
+
+        if (bearing1 != null) {
+            switch (type) {
+                case "perpendicularity":
+                    error1 = bearing1.getPerpendicularityError() != null ?
+                            bearing1.getPerpendicularityError().doubleValue() : 0.01;
+                    break;
+                case "axialRunout":
+                    error1 = bearing1.getAxialRunout() != null ?
+                            bearing1.getAxialRunout().doubleValue() : 0.005;
+                    break;
+                case "radialRunout":
+                    error1 = bearing1.getRadialRunout() != null ?
+                            bearing1.getRadialRunout().doubleValue() : 0.003;
+                    break;
+            }
+        }
+        if (bearing2 != null) {
+            switch (type) {
+                case "perpendicularity":
+                    error2 = bearing2.getPerpendicularityError() != null ?
+                            bearing2.getPerpendicularityError().doubleValue() : 0.01;
+                    break;
+                case "axialRunout":
+                    error2 = bearing2.getAxialRunout() != null ?
+                            bearing2.getAxialRunout().doubleValue() : 0.005;
+                    break;
+                case "radialRunout":
+                    error2 = bearing2.getRadialRunout() != null ?
+                            bearing2.getRadialRunout().doubleValue() : 0.003;
+                    break;
+            }
+        }
+
+        return Math.sqrt(error1 * error1 + error2 * error2);
+    }
+
+    private double[][] buildDCMFromEuler(double roll, double pitch, double yaw) {
+        double cr = Math.cos(roll), sr = Math.sin(roll);
+        double cp = Math.cos(pitch), sp = Math.sin(pitch);
+        double cy = Math.cos(yaw), sy = Math.sin(yaw);
+
+        return new double[][]{
+                {cp * cy, sr * sp * cy - cr * sy, cr * sp * cy + sr * sy},
+                {cp * sy, sr * sp * sy + cr * cy, cr * sp * sy - sr * cy},
+                {-sp, sr * cp, cr * cp}
+        };
+    }
+
+    private double[] multiplyMatrixVector(double[][] matrix, double[] vector) {
+        double[] result = new double[3];
+        for (int i = 0; i < 3; i++) {
+            result[i] = 0;
+            for (int j = 0; j < 3; j++) {
+                result[i] += matrix[i][j] * vector[j];
+            }
+        }
+        return result;
+    }
+
+    private double calculateUncertainty(Map<String, Double> axisErrors,
+                                        List<SensorData> sensorDataList,
+                                        GeometricErrorResult geometricError) {
         double varianceSum = 0.0;
         int count = 0;
 
@@ -150,7 +296,33 @@ public class PointingAccuracyModel {
             count++;
         }
 
+        double geometricUncertainty = geometricError.geometricContribution * 0.15;
+        varianceSum += geometricUncertainty * geometricUncertainty;
+        count++;
+
         return Math.sqrt(varianceSum / Math.max(count, 1));
+    }
+
+    public static class GeometricErrorResult {
+        public final double perpendicularityEquatorial;
+        public final double perpendicularityAltaz;
+        public final double axialRunout;
+        public final double radialRunout;
+        public final double azimuthError;
+        public final double altitudeError;
+        public final double geometricContribution;
+
+        public GeometricErrorResult(double perpEq, double perpAlt,
+                                   double axial, double radial,
+                                   double azErr, double altErr, double contrib) {
+            this.perpendicularityEquatorial = perpEq;
+            this.perpendicularityAltaz = perpAlt;
+            this.axialRunout = axial;
+            this.radialRunout = radial;
+            this.azimuthError = azErr;
+            this.altitudeError = altErr;
+            this.geometricContribution = contrib;
+        }
     }
 
     public static class PointingAnalysisResult {
@@ -161,12 +333,14 @@ public class PointingAccuracyModel {
         private final double totalPointingError;
         private final Map<String, Object> errorSource;
         private final double uncertainty;
+        private final GeometricErrorResult geometricError;
 
         public PointingAnalysisResult(double targetRa, double targetDec,
                                       double azimuthError, double altitudeError,
                                       double totalPointingError,
                                       Map<String, Object> errorSource,
-                                      double uncertainty) {
+                                      double uncertainty,
+                                      GeometricErrorResult geometricError) {
             this.targetRa = targetRa;
             this.targetDec = targetDec;
             this.azimuthError = azimuthError;
@@ -174,6 +348,7 @@ public class PointingAccuracyModel {
             this.totalPointingError = totalPointingError;
             this.errorSource = errorSource;
             this.uncertainty = uncertainty;
+            this.geometricError = geometricError;
         }
 
         public PointingAnalysis toEntity(com.astrohistory.armillary.entity.ArmillaryInstrument instrument,
@@ -186,6 +361,16 @@ public class PointingAccuracyModel {
                     .azimuthError(BigDecimal.valueOf(azimuthError).setScale(8, RoundingMode.HALF_UP))
                     .altitudeError(BigDecimal.valueOf(altitudeError).setScale(8, RoundingMode.HALF_UP))
                     .totalPointingError(BigDecimal.valueOf(totalPointingError).setScale(8, RoundingMode.HALF_UP))
+                    .perpendicularityErrorEquatorial(BigDecimal.valueOf(
+                            geometricError.perpendicularityEquatorial).setScale(8, RoundingMode.HALF_UP))
+                    .perpendicularityErrorAltaz(BigDecimal.valueOf(
+                            geometricError.perpendicularityAltaz).setScale(8, RoundingMode.HALF_UP))
+                    .axialRunoutError(BigDecimal.valueOf(
+                            geometricError.axialRunout).setScale(8, RoundingMode.HALF_UP))
+                    .radialRunoutError(BigDecimal.valueOf(
+                            geometricError.radialRunout).setScale(8, RoundingMode.HALF_UP))
+                    .geometricErrorContribution(BigDecimal.valueOf(
+                            geometricError.geometricContribution).setScale(8, RoundingMode.HALF_UP))
                     .raErrorSource(errorSource)
                     .errorUncertainty(BigDecimal.valueOf(uncertainty).setScale(8, RoundingMode.HALF_UP))
                     .build();
@@ -198,5 +383,6 @@ public class PointingAccuracyModel {
         public double getTotalPointingError() { return totalPointingError; }
         public Map<String, Object> getErrorSource() { return errorSource; }
         public double getUncertainty() { return uncertainty; }
+        public GeometricErrorResult getGeometricError() { return geometricError; }
     }
 }
