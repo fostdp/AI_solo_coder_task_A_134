@@ -1,0 +1,55 @@
+# =============================================
+# Prometheus 配置 - 采集简仪仿真系统指标
+# =============================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+  external_labels:
+    cluster: armillary-simulation
+    environment: production
+
+rule_files: []
+
+alerting:
+  alertmanagers: []
+
+scrape_configs:
+  # =============================================
+  # SpringBoot Actuator Prometheus
+  # =============================================
+  - job_name: 'armillary-backend'
+    metrics_path: '/actuator/prometheus'
+    scheme: http
+    static_configs:
+      - targets: ['backend:8080']
+        labels:
+          service: 'springboot-backend'
+          module: '4-modules-event-driven'
+          version: 'v2.0'
+
+    metric_relabel_configs:
+      # 保留核心指标，降低存储占用
+      - source_labels: [__name__]
+        regex: '^(http_server_requests_seconds|jvm_memory_used_bytes|jvm_gc_.*|hikaricp_connections_.*|system_cpu_usage|process_uptime_seconds|tomcat_sessions_.*)'
+        action: keep
+
+  # =============================================
+  # Nginx 前端 (若启用stub_status)
+  # =============================================
+  - job_name: 'armillary-frontend-nginx'
+    static_configs:
+      - targets: ['frontend:80']
+        labels:
+          service: 'nginx-frontend'
+
+  # =============================================
+  # PostgreSQL (如果启用pg_exporter)
+  # =============================================
+  - job_name: 'armillary-postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          service: 'postgres-16'
+    scrape_interval: 30s

@@ -1,0 +1,32 @@
+# ============ 构建阶段 ============
+backend/
+**/target/
+**/node_modules/
+frontend/dist/
+.git/
+.gitignore
+.vscode/
+.idea/
+**/*.md
+*.md
+simulator/*.pyc
+**/__pycache__/
+README*
+TODO*
+CHANGELOG*
+FIXES*
+docker-compose*.yml
+Dockerfile*
+deploy/
+database/upgrade*.sql
+
+# ============ 运行阶段 ============
+**/*.log
+logs/
+*.log
+tmp/
+temp/
+data/
+.env
+.env.*
+!deploy/.env.example

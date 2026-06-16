@@ -1,0 +1,246 @@
+# =============================================
+# 古代天文简仪轴承摩擦仿真系统 - docker-compose.yml
+# 版本: 2.0
+# =============================================
+# 服务:
+#   - postgres:    PostgreSQL 16 主数据库
+#   - mosquitto:   Eclipse Mosquitto MQTT Broker
+#   - backend:     SpringBoot 后端 (4模块解耦)
+#   - frontend:    Nginx 托管前端 (Three.js)
+#   - simulator:   Python 传感器模拟器 (6种工况)
+#   - prometheus:  Prometheus 监控采集
+# =============================================
+
+name: armillary-simulation-v2
+services:
+
+  # =============================================
+  # 1. PostgreSQL 16
+  # =============================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: armillary-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: armillary_simulation
+      POSTGRES_USER: armillary
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?请在.env中设置DB_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+      TZ: Asia/Shanghai
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./database/upgrade_v2.sql:/docker-entrypoint-initdb.d/02-upgrade.sql:ro
+      - ./database/index_optimization.sql:/docker-entrypoint-initdb.d/03-index.sql:ro
+      - ./deploy/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    command:
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U armillary -d armillary_simulation"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - armillary-net
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2'
+
+  # =============================================
+  # 2. Mosquitto MQTT Broker
+  # =============================================
+  mosquitto:
+    image: eclipse-mosquitto:2.0.18
+    container_name: armillary-mosquitto
+    restart: unless-stopped
+    user: "1883:1883"
+    environment:
+      TZ: Asia/Shanghai
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
+      - "9001:9001"
+    volumes:
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+      - ./deploy/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./deploy/mosquitto_acl.conf:/mosquitto/config/acl:ro
+      - ./deploy/mosquitto_passwd:/mosquitto/config/passwd:ro
+    entrypoint: >
+      sh -c "
+        chmod 700 /mosquitto/config/passwd 2>/dev/null || true;
+        /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf
+      "
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$SYS/broker/clients/total", "-C", "1", "-W", "3"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      - armillary-net
+
+  # =============================================
+  # 3. SpringBoot 后端服务
+  # =============================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      target: runtime
+    container_name: armillary-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVER_PORT: 8080
+      DB_PASSWORD: ${DB_PASSWORD}
+      MQTT_PASSWORD: ${MQTT_PASSWORD}
+      JAVA_OPTS: >-
+        -XX:InitialRAMPercentage=50.0
+        -XX:MaxRAMPercentage=75.0
+        -XX:+UseG1GC
+        -XX:+UseStringDeduplication
+        -Djava.security.egd=file:/dev/./urandom
+        -Dfile.encoding=UTF-8
+      ENVIRONMENT: docker
+      TZ: Asia/Shanghai
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+      - "9090:9090"
+    volumes:
+      - backend_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    networks:
+      - armillary-net
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2'
+
+  # =============================================
+  # 4. Nginx 前端
+  # =============================================
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      target: runtime
+    container_name: armillary-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      TZ: Asia/Shanghai
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:80/nginx-health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+    networks:
+      - armillary-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+  # =============================================
+  # 5. Python 传感器模拟器 (默认正常模式)
+  # =============================================
+  simulator:
+    build:
+      context: .
+      dockerfile: Dockerfile.simulator
+    container_name: armillary-simulator
+    restart: unless-stopped
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    environment:
+      SIMULATOR_MODE: ${SIMULATOR_MODE:-normal}
+      SIMULATOR_SPEED_FACTOR: "${SIMULATOR_SPEED_FACTOR:-1.0}"
+      SIMULATOR_LOAD_FACTOR: "${SIMULATOR_LOAD_FACTOR:-1.0}"
+      SIMULATOR_INTERVAL_SECONDS: "${SIMULATOR_INTERVAL_SECONDS:-60}"
+      INSTRUMENT_ID: a1b2c3d4-e5f6-7890-abcd-ef0123456789
+      INSTRUMENT_NAME: "郭守敬简仪复原研究1号"
+      MQTT_BROKER_HOST: mosquitto
+      MQTT_BROKER_PORT: 1883
+      MQTT_USERNAME: simulator
+      MQTT_PASSWORD: ${MQTT_PASSWORD}
+      MQTT_TOPIC: armillary/sensor/data
+      TZ: Asia/Shanghai
+    profiles:
+      - simulator
+    networks:
+      - armillary-net
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.5'
+
+  # =============================================
+  # 6. Prometheus 监控采集 (可选)
+  # =============================================
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: armillary-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9091:9090"
+    volumes:
+      - prometheus_data:/prometheus
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    profiles:
+      - monitoring
+    networks:
+      - armillary-net
+    depends_on:
+      - backend
+
+# =============================================
+# 网络与卷
+# =============================================
+networks:
+  armillary-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  postgres_data:
+    driver: local
+  mosquitto_data:
+    driver: local
+  mosquitto_log:
+    driver: local
+  backend_logs:
+    driver: local
+  prometheus_data:
+    driver: local

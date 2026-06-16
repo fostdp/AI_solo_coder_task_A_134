@@ -2,14 +2,14 @@
     "mqtt": {
         "broker": "localhost",
         "port": 1883,
-        "clientId": "armillary-simulator-001",
-        "username": "",
-        "password": "",
-        "topicPrefix": "armillary/sensor"
+        "clientId": "armillary-simulator-v2",
+        "username": "simulator",
+        "password": "armillary_mqtt_2026",
+        "topicPrefix": "armillary"
     },
     "instrument": {
-        "id": "JY-001",
-        "name": "元代简仪复原件1号",
+        "id": "a1b2c3d4-e5f6-7890-abcd-ef0123456789",
+        "name": "郭守敬简仪复原研究1号",
         "reportInterval": 60000,
         "axes": [
             {
@@ -51,13 +51,14 @@
         ]
     },
     "simulation": {
+        "operatingMode": "normal",
         "noiseLevel": 0.05,
         "wearAccelerationFactor": 1.0,
         "faultInjection": {
             "enabled": false,
             "faultType": "excessive_wear",
             "faultAxis": "赤道轴",
-            "faultStartTime": "2025-01-01T00:00:00",
+            "faultStartTime": "",
             "faultSeverity": 2.0
         }
     }

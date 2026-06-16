@@ -1,0 +1,43 @@
+# =============================================
+# 传感器模拟器 Dockerfile
+# =============================================
+FROM python:3.11-slim-bookworm
+
+LABEL maintainer="astrohistory-research@example.com"
+LABEL description="简仪MQTT传感器模拟器 - 支持多工况模式"
+LABEL version="2.0"
+
+ENV TZ=Asia/Shanghai
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+RUN apt-get update -q && \
+    apt-get install -y -q --no-install-recommends tzdata curl && \
+    ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# 先复制依赖
+COPY simulator/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple \
+    -r requirements.txt
+
+# 复制源码和配置
+COPY simulator/sensor_simulator.py ./sensor_simulator.py
+COPY simulator/config.json ./config.json
+
+ENV MQTT_BROKER_HOST=mosquitto \
+    MQTT_BROKER_PORT=1883 \
+    MQTT_TOPIC=armillary/sensor/data \
+    SIMULATOR_MODE=normal \
+    SIMULATOR_INTERVAL_SECONDS=60 \
+    INSTRUMENT_ID=a1b2c3d4-e5f6-7890-abcd-ef0123456789 \
+    INSTRUMENT_NAME="郭守敬简仪复原研究1号"
+
+HEALTHCHECK --interval=60s --timeout=5s --retries=3 \
+    CMD python -c "import paho.mqtt.client as mqtt; c=mqtt.Client(); c.connect('${MQTT_BROKER_HOST}', int('${MQTT_BROKER_PORT}'), 3); print('OK')" || exit 1
+
+CMD ["python", "-u", "./sensor_simulator.py"]

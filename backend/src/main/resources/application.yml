@@ -1,5 +1,9 @@
 server:
   port: 8080
+  compression:
+    enabled: true
+    mime-types: application/json,text/html,text/xml,text/plain,application/javascript,text/css
+    min-response-size: 1024
 
 spring:
   application:
@@ -73,3 +77,48 @@ logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics,loggers,env,beans,mappings
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+      roles: ADMIN
+    metrics:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+        step: 10s
+        descriptions: true
+    tags:
+      application: ${spring.application.name}
+      environment: ${ENVIRONMENT:default}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5, 0.75, 0.9, 0.95, 0.99
+  info:
+    build:
+      enabled: true
+    env:
+      enabled: true
+
+info:
+  app:
+    name: ${spring.application.name}
+    version: 2.0.0
+    description: "古代天文简仪轴承摩擦仿真与指向精度分析系统"
+    architecture: "Spring Events 4模块解耦架构"
+    maintainer: "astrohistory-research@example.com"
+  java:
+    version: ${java.version}
+    vendor: ${java.vm.vendor}

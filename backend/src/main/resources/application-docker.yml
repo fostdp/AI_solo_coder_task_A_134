@@ -1,0 +1,50 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/armillary_simulation
+    username: armillary
+    password: ${DB_PASSWORD:armillary_2026}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 30
+      minimum-idle: 10
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      pool-name: ArmillaryHikariPool
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: UTC
+        generate_statistics: false
+        order_inserts: true
+        order_updates: true
+        batch_size: 50
+    open-in-view: false
+
+mqtt:
+  broker: tcp://mosquitto:1883
+  client-id: armillary-backend-docker
+  username: armillary
+  password: ${MQTT_PASSWORD:armillary_mqtt_2026}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+
+ENVIRONMENT: docker

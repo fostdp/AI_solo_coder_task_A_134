@@ -1,0 +1,10 @@
+# Mosquitto 密码文件 (生成方式)
+# 容器首次启动前请先运行:
+#   mosquitto_passwd -c deploy/mosquitto_passwd backend
+#   mosquitto_passwd deploy/mosquitto_passwd simulator
+#   mosquitto_passwd deploy/mosquitto_passwd frontend
+#
+# 下面是示例（实际部署请替换为加密密码）
+backend:$7$101$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+simulator:$7$101$yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
+frontend:$7$101$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz

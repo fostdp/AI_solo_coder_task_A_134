@@ -1,0 +1,85 @@
+# =============================================
+# 多阶段 Dockerfile - 简仪轴承摩擦仿真后端
+# 阶段1: Builder (Maven编译)
+# 阶段2: Runtime (JRE运行)
+# =============================================
+
+FROM maven:3.9-eclipse-temurin-21-jammy AS builder
+LABEL stage=builder
+
+WORKDIR /app
+
+# 先复制pom.xml利用缓存
+COPY backend/pom.xml ./pom.xml
+RUN mvn dependency:go-offline -q
+
+# 复制源码编译
+COPY backend/src ./src
+COPY backend/src/main/resources ./src/main/resources
+
+RUN mvn clean package -DskipTests -q && \
+    mv target/armillary-simulation-*.jar /app/app.jar
+
+# 验证jar包完整性
+RUN java -Djarmode=layertools -jar /app/app.jar extract --destination /app/extracted 2>/dev/null || \
+    echo "Layer extraction skipped, using standard jar execution"
+
+# =============================================
+# 运行阶段 - 使用JRE精简镜像
+# =============================================
+FROM eclipse-temurin:21-jre-jammy AS runtime
+
+LABEL maintainer="astrohistory-research@example.com"
+LABEL description="古代天文简仪轴承摩擦仿真与指向精度分析系统 后端服务"
+LABEL version="2.0"
+
+# 系统优化
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update -q && \
+    apt-get install -y -q --no-install-recommends \
+        curl \
+        tzdata \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/* && \
+    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone
+
+ENV TZ=Asia/Shanghai
+ENV LANG=zh_CN.UTF-8
+ENV LC_ALL=zh_CN.UTF-8
+
+WORKDIR /app
+
+# 创建非root用户
+RUN groupadd -r armillary -g 1000 && \
+    useradd -r -u 1000 -g armillary -m -s /usr/sbin/nologin armillary && \
+    chown -R armillary:armillary /app
+
+USER armillary
+
+# 复制构建产物
+COPY --from=builder --chown=armillary:armillary /app/app.jar /app/app.jar
+
+# JVM参数配置
+ENV JAVA_OPTS="-XX:InitialRAMPercentage=50.0 \
+               -XX:MaxRAMPercentage=75.0 \
+               -XX:+UseG1GC \
+               -XX:MaxGCPauseMillis=200 \
+               -XX:+UseStringDeduplication \
+               -XX:+OptimizeStringConcat \
+               -Djava.security.egd=file:/dev/./urandom \
+               -Dfile.encoding=UTF-8 \
+               -Dsun.jnu.encoding=UTF-8"
+
+ENV SPRING_PROFILES_ACTIVE=docker
+ENV SERVER_PORT=8080
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
+    CMD curl -fsS http://localhost:8080/actuator/health || exit 1
+
+# 暴露端口: HTTP + JMX Debug (可选)
+EXPOSE 8080 9090
+
+ENTRYPOINT [ "sh", "-c", \
+    "exec java $JAVA_OPTS -Dserver.port=${SERVER_PORT} -jar /app/app.jar" ]
